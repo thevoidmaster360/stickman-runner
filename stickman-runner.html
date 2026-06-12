@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stickman Runner</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #20232a;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .game-wrap {
+      width: min(900px, 96vw);
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      background: #4caf50;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #43a047;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 3 / 1;
+      display: block;
+      background: linear-gradient(#9ad7ff 0%, #dff5ff 62%, #7cc36d 62%, #5aa84d 100%);
+      border: 4px solid white;
+      border-radius: 8px;
+    }
+
+    .help {
+      margin-top: 10px;
+      color: #d7d7d7;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-wrap">
+    <div class="top-bar">
+      <div>Distance: <span id="score">0</span> m</div>
+      <button id="restartButton">Restart</button>
+    </div>
+
+    <canvas id="gameCanvas" width="900" height="300"></canvas>
+    <div class="help">Press Space, Arrow Up, or click/tap to jump.</div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const scoreText = document.getElementById("score");
+    const restartButton = document.getElementById("restartButton");
+
+    class Stickman {
+      constructor() {
+        this.x = 110;
+        this.groundY = 235;
+        this.width = 36;
+        this.height = 80;
+        this.y = this.groundY - this.height;
+        this.speedY = 0;
+        this.gravity = 0.75;
+        this.jumpPower = -15;
+        this.isOnGround = true;
+      }
+
+      jump() {
+        if (this.isOnGround) {
+          this.speedY = this.jumpPower;
+          this.isOnGround = false;
+        }
+      }
+
+      update() {
+        this.y += this.speedY;
+        this.speedY += this.gravity;
+
+        if (this.y >= this.groundY - this.height) {
+          this.y = this.groundY - this.height;
+          this.speedY = 0;
+          this.isOnGround = true;
+        }
+      }
+
+      getBounds() {
+        return {
+          x: this.x,
+          y: this.y,
+          width: this.width,
+          height: this.height
+        };
+      }
+
+      draw() {
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+
+        const headX = this.x + this.width / 2;
+        const headY = this.y + 14;
+        const bodyTop = this.y + 32;
+        const bodyBottom = this.y + 58;
+
+        ctx.beginPath();
+        ctx.arc(headX, headY, 12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(headX, bodyTop);
+        ctx.lineTo(headX, bodyBottom);
+        ctx.moveTo(headX, this.y + 42);
+        ctx.lineTo(this.x + 4, this.y + 52);
+        ctx.moveTo(headX, this.y + 42);
+        ctx.lineTo(this.x + 32, this.y + 52);
+        ctx.moveTo(headX, bodyBottom);
+        ctx.lineTo(this.x + 5, this.y + 78);
+        ctx.moveTo(headX, bodyBottom);
+        ctx.lineTo(this.x + 32, this.y + 78);
+        ctx.stroke();
+      }
+    }
+
+    class Obstacle {
+      constructor(x, speed) {
+        this.x = x;
+        this.y = 205;
+        this.width = 34;
+        this.height = 30;
+        this.speed = speed;
+      }
+
+      update() {
+        this.x -= this.speed;
+      }
+
+      isOffScreen() {
+        return this.x + this.width < 0;
+      }
+
+      getBounds() {
+        return {
+          x: this.x,
+          y: this.y,
+          width: this.width,
+          height: this.height
+        };
+      }
+
+      draw() {
+        ctx.fillStyle = "#7b3f25";
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        ctx.fillStyle = "#5c2f1c";
+        ctx.fillRect(this.x + 5, this.y - 10, this.width - 10, 10);
+      }
+    }
+
+    class Game {
+      constructor() {
+        this.stickman = new Stickman();
+        this.obstacles = [];
+        this.distance = 0;
+        this.speed = 6;
+        this.spawnTimer = 0;
+        this.spawnDelay = 90;
+        this.isGameOver = false;
+      }
+
+      reset() {
+        this.stickman = new Stickman();
+        this.obstacles = [];
+        this.distance = 0;
+        this.speed = 6;
+        this.spawnTimer = 0;
+        this.spawnDelay = 90;
+        this.isGameOver = false;
+      }
+
+      update() {
+        if (this.isGameOver) {
+          return;
+        }
+
+        this.stickman.update();
+        this.distance += this.speed / 10;
+        this.speed += 0.002;
+        this.spawnTimer++;
+
+        if (this.spawnTimer >= this.spawnDelay) {
+          this.obstacles.push(new Obstacle(canvas.width, this.speed));
+          this.spawnTimer = 0;
+          this.spawnDelay = 70 + Math.floor(Math.random() * 55);
+        }
+
+        for (let obstacle of this.obstacles) {
+          obstacle.speed = this.speed;
+          obstacle.update();
+
+          if (this.isColliding(this.stickman.getBounds(), obstacle.getBounds())) {
+            this.isGameOver = true;
+          }
+        }
+
+        this.obstacles = this.obstacles.filter(function(obstacle) {
+          return !obstacle.isOffScreen();
+        });
+
+        scoreText.textContent = Math.floor(this.distance);
+      }
+
+      isColliding(a, b) {
+        return a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y;
+      }
+
+      drawGround() {
+        ctx.fillStyle = "#3f7f3b";
+        ctx.fillRect(0, 235, canvas.width, 5);
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+        ctx.lineWidth = 2;
+        for (let x = 0; x < canvas.width; x += 45) {
+          const movingX = (x - this.distance * 3) % 45;
+          ctx.beginPath();
+          ctx.moveTo(movingX, 255);
+          ctx.lineTo(movingX + 20, 255);
+          ctx.stroke();
+        }
+      }
+
+      drawGameOver() {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.font = "bold 44px Arial";
+        ctx.fillText("Game Over", canvas.width / 2, 130);
+
+        ctx.font = "22px Arial";
+        ctx.fillText("Distance: " + Math.floor(this.distance) + " m", canvas.width / 2, 170);
+        ctx.fillText("Press Restart to try again", canvas.width / 2, 205);
+      }
+
+      draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        this.drawGround();
+
+        for (let obstacle of this.obstacles) {
+          obstacle.draw();
+        }
+
+        this.stickman.draw();
+
+        if (this.isGameOver) {
+          this.drawGameOver();
+        }
+      }
+    }
+
+    const game = new Game();
+
+    function jump() {
+      if (!game.isGameOver) {
+        game.stickman.jump();
+      }
+    }
+
+    function gameLoop() {
+      game.update();
+      game.draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.addEventListener("keydown", function(event) {
+      if (event.code === "Space" || event.code === "ArrowUp") {
+        event.preventDefault();
+        jump();
+      }
+    });
+
+    canvas.addEventListener("pointerdown", jump);
+
+    restartButton.addEventListener("click", function() {
+      game.reset();
+    });
+
+    gameLoop();
+  </script>
+</body>
+</html>
